@@ -366,6 +366,7 @@ jobs:
           }
 
           Write-Host "Windows artifact prepared successfully"
+                    exit 0
 
       - name: Upload LichtFeld Studio Windows
         if: matrix.build_type == 'Release'
