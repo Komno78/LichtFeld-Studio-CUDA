@@ -312,7 +312,7 @@ jobs:
           }
           Write-Host "Found nvJPEG2000 runtime: $runtime"
           $extensions | ForEach-Object { Write-Host "Found nvjpeg2k extension: $($_.FullName)" }
-            - name: Prepare Windows artifact
+      - name: Prepare Windows artifact
         if: matrix.build_type == 'Release'
         shell: pwsh
         run: |
