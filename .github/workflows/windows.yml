@@ -170,8 +170,7 @@ jobs:
         shell: cmd
         run: |
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-          python tools/ci_retry_configure.py -- cmake -B %BUILD_DIR% -S . -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DLFS_FAST_COMPILE=ON -DBUILD_FORMAT_TESTS=ON -DBUILD_VISUALIZER_TESTS=ON -DBUILD_UNICODE_TEST_ONLY=ON -DBUILD_PYTHON_STUBS=OFF -DLFS_DEV_IMPORT_SOURCE_PYTHON=OFF -DLFS_DEV_IMPORT_SOURCE_RESOURCES=OFF -DLFS_ENABLE_CUDA_DEVICE_DEBUG=OFF
-
+          python tools/ci_retry_configure.py -- cmake -B %BUILD_DIR% -S . -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DLFS_FAST_COMPILE=ON -DBUILD_FORMAT_TESTS=ON -DBUILD_VISUALIZER_TESTS=ON -DBUILD_UNICODE_TEST_ONLY=ON -DBUILD_PYTHON_STUBS=OFF -DLFS_DEV_IMPORT_SOURCE_PYTHON=OFF -DLFS_DEV_IMPORT_SOURCE_RESOURCES=OFF -DLFS_ENABLE_CUDA_DEVICE_DEBUG=OFF -DBUILD_CUDA_PTX_ONLY=ON -DBUILD_CUDA_MIN_SM=75
       # Save fetched archives even when configure fails later. vcpkg verifies
       # downloaded archives against their hashes.
       - name: Save vcpkg downloads
@@ -313,18 +312,66 @@ jobs:
           }
           Write-Host "Found nvJPEG2000 runtime: $runtime"
           $extensions | ForEach-Object { Write-Host "Found nvjpeg2k extension: $($_.FullName)" }
+            - name: Prepare Windows artifact
+        if: matrix.build_type == 'Release'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $source = Join-Path $env:GITHUB_WORKSPACE $env:BUILD_DIR
+          $destination = Join-Path $env:GITHUB_WORKSPACE 'artifact'
+
+          if (-not (Test-Path (Join-Path $source 'LichtFeld-Studio.exe'))) {
+            throw "Executable not found in $source"
+          }
+          if (-not (Test-Path (Join-Path $source 'nvjpeg2k_0.dll'))) {
+            throw "nvjpeg2k_0.dll not found in $source"
+          }
+          if (-not (Test-Path (Join-Path $source 'extensions'))) {
+            throw "Extensions directory not found in $source"
+          }
+          if (-not (Test-Path (Join-Path $source 'resources'))) {
+            throw "Resources directory not found in $source"
+          }
+
+          $extensions = @(Get-ChildItem (Join-Path $source 'extensions') -Filter 'nvjpeg2k_ext*.dll')
+          if ($extensions.Count -eq 0) {
+            throw "No nvjpeg2k extension DLL found"
+          }
+
+          if (Test-Path $destination) {
+            Remove-Item $destination -Recurse -Force
+          }
+          New-Item -ItemType Directory -Force -Path $destination | Out-Null
+
+          robocopy $source $destination /E /R:1 /W:1 /XJ /XD (Join-Path $source 'vcpkg_installed') CMakeFiles /XF "*.obj" "*.pdb" "*.lib" "*.exp"
+          if ($LASTEXITCODE -ge 8) {
+            throw "Robocopy failed with exit code $LASTEXITCODE"
+          }
+
+          $required = @(
+            'LichtFeld-Studio.exe',
+            'nvjpeg2k_0.dll',
+            'extensions',
+            'resources'
+          )
+          foreach ($item in $required) {
+            if (-not (Test-Path (Join-Path $destination $item))) {
+              throw "Artifact is missing: $item"
+            }
+          }
+
+          $copiedExtensions = @(Get-ChildItem (Join-Path $destination 'extensions') -Filter 'nvjpeg2k_ext*.dll')
+          if ($copiedExtensions.Count -eq 0) {
+            throw "Artifact is missing nvjpeg2k extension DLL"
+          }
+
+          Write-Host "Windows artifact prepared successfully"
+
       - name: Upload LichtFeld Studio Windows
         if: matrix.build_type == 'Release'
         uses: actions/upload-artifact@v4
         with:
           name: LichtFeld-Studio-Complete
-          path: |
-            ${{ env.BUILD_DIR }}/**
-            !${{ env.BUILD_DIR }}/**/CMakeFiles/**
-            !${{ env.BUILD_DIR }}/**/*.obj
-            !${{ env.BUILD_DIR }}/**/*.pdb
-            !${{ env.BUILD_DIR }}/**/*.lib
-            !${{ env.BUILD_DIR }}/**/*.exp
-            !${{ env.BUILD_DIR }}/vcpkg_installed/**
+          path: artifact/**
           if-no-files-found: error
           retention-days: 7
