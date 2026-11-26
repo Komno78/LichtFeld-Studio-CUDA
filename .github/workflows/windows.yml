@@ -313,3 +313,18 @@ jobs:
           }
           Write-Host "Found nvJPEG2000 runtime: $runtime"
           $extensions | ForEach-Object { Write-Host "Found nvjpeg2k extension: $($_.FullName)" }
+      - name: Upload LichtFeld Studio Windows
+        if: matrix.build_type == 'Release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: LichtFeld-Studio-Complete
+          path: |
+            ${{ env.BUILD_DIR }}/**
+            !${{ env.BUILD_DIR }}/**/CMakeFiles/**
+            !${{ env.BUILD_DIR }}/**/*.obj
+            !${{ env.BUILD_DIR }}/**/*.pdb
+            !${{ env.BUILD_DIR }}/**/*.lib
+            !${{ env.BUILD_DIR }}/**/*.exp
+            !${{ env.BUILD_DIR }}/vcpkg_installed/**
+          if-no-files-found: error
+          retention-days: 7
